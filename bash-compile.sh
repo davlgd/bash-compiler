@@ -27,46 +27,34 @@ xxd -i "$data_file" > "$hex_file"
 cat > "$c_file" <<EOL
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "bash_script_hex.c"
 
 int main() {
+    // Check if Bash is installed on the system
     if (system("which bash > /dev/null") != 0) {
-        fprintf(stderr, "Error: bash is nos installed on this system\\n");
+        fprintf(stderr, "Error: bash is not installed on this system\n");
         return 1;
     }
 
-    char temp_filename[] = "/tmp/script_launcher_XXXXXX";
-    int fd = mkstemp(temp_filename);
-    if (fd == -1) {
+    // Create a process to execute Bash
+    FILE *fp = popen("bash", "w");
+    if (!fp) {
+        fprintf(stderr, "Error while opening pipe to bash\n");
         return 1;
     }
 
-    ssize_t bytes_written = write(fd, bash_script_data, bash_script_data_len);
-    if (bytes_written == -1 || bytes_written != bash_script_data_len) {
-        fprintf(stderr, "Error while writing the script in a temp file\\n");
-        close(fd);
-        return 1;
-    }
-    close(fd);
+    // Write the script content to stdin
+    fwrite(bash_script_data, 1, bash_script_data_len, fp);
 
-    chmod(temp_filename, S_IRWXU);
-
-    int status = system(temp_filename);
-    if (status == -1) {
-        fprintf(stderr, "Error while executing the script\\n");
-        return 1;
-    }
-
-    remove(temp_filename);
+    // Close the process
+    pclose(fp);
 
     return 0;
 }
 EOL
 
-mkdir -p bin 
+mkdir -p bin
 
 # C code compile
 gcc "$c_file" -O3 -o "bin/$executable_name"
